@@ -6,18 +6,18 @@ const { v4: uuidv4 } = require('uuid');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Configure node-geocoder with OpenStreetMap and custom User-Agent
+// Configure node-geocoder with Geoapify
 let geocoder;
 try {
-  console.log('Initializing geocoder with OpenStreetMap provider');
+  console.log('Initializing geocoder with Geoapify provider');
   geocoder = NodeGeocoder({
-    provider: 'openstreetmap',
+    provider: 'geoapify',
     httpAdapter: 'https',
-    apiKey: null,
+    apiKey: process.env.GEOAPIFY_API_KEY, // Set in Vercel environment variables
     formatter: null,
     httpOptions: {
       headers: {
-        'User-Agent': 'LocationAPI/1.0 (your-email@example.com)' // Replace with your app name and email
+        'User-Agent': 'LocationAPI/1.0 (your-email@example.com)' // Replace with your email
       }
     }
   });
@@ -135,13 +135,15 @@ app.post('/api/geocode/:id', async (req, res) => {
     console.log(`Geocoding coordinates: lat=${latitude}, lon=${longitude}`);
     const result = await geocoder.reverse({ lat: latitude, lon: longitude });
     
+    console.log(`Geocoder raw response for ID: ${uniqueId}:`, JSON.stringify(result, null, 2));
+    
     if (!result || result.length === 0) {
       console.warn(`No geocoding results for ID: ${uniqueId}`);
       return res.status(404).json({ error: 'Address not found' });
     }
 
-    const address = result[0]?.formattedAddress || 'Address not found';
-    console.log(`Geocoded address for ID: ${uniqueId | 'Unknown'}: ${address}`);
+    const address = result[0]?.formattedAddress || result[0]?.address || 'Address not found';
+    console.log(`Geocoded address for ID: ${uniqueId}: ${address}`);
     
     res.json({
       latitude,
@@ -149,8 +151,8 @@ app.post('/api/geocode/:id', async (req, res) => {
       address
     });
   } catch (error) {
-    console.error(`Error in geocode endpoint for ID: ${uniqueId}`, error.message);
-    res.status(500).json({ error: 'Failed to geocode location' });
+    console.error(`Error in geocode endpoint for ID: ${uniqueId}`, error.message, error.stack);
+    res.status(500).json({ error: 'Failed to geocode location', details: error.message });
   }
 });
 
