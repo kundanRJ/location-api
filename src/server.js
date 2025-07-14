@@ -1,24 +1,41 @@
 const express = require('express');
 const NodeGeocoder = require('node-geocoder');
 const { v4: uuidv4 } = require('uuid');
+// const rateLimit = require('express-rate-limit'); // Uncomment if using server-side rate limiting
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Configure node-geocoder with OpenStreetMap
+// Configure node-geocoder with OpenStreetMap and custom User-Agent
 let geocoder;
 try {
   console.log('Initializing geocoder with OpenStreetMap provider');
   geocoder = NodeGeocoder({
-    provider: 'openstreetmap'
+    provider: 'openstreetmap',
+    httpAdapter: 'https',
+    apiKey: null,
+    formatter: null,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'LocationAPI/1.0 (your-email@example.com)' // Replace with your app name and email
+      }
+    }
   });
 } catch (error) {
   console.error('Failed to initialize geocoder:', error.message);
-  process.exit(1); // Exit if geocoder initialization fails
+  process.exit(1);
 }
 
 // Middleware to parse JSON bodies
 app.use(express.json());
+
+// Optional server-side rate limiting for /api/geocode/:id
+// const geocodeLimiter = rateLimit({
+//   windowMs: 1000, // 1 second
+//   max: 1, // 1 request per second
+//   message: 'Too many requests, please try again after 1 second.'
+// });
+// app.use('/api/geocode/:id', geocodeLimiter);
 
 // Serve static HTML page for location requests
 app.get('/location/:id', (req, res) => {
@@ -39,29 +56,34 @@ app.get('/location/:id', (req, res) => {
         <p id="status">Requesting location...</p>
         <p id="location"></p>
         <script>
+          async function fetchGeocodeWithDelay(latitude, longitude, uniqueId) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            try {
+              const response = await fetch('/api/geocode/${uniqueId}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ latitude, longitude })
+              });
+              if (!response.ok) {
+                throw new Error('Failed to fetch address: ' + response.statusText);
+              }
+              const data = await response.json();
+              document.getElementById('location').textContent = 
+                \`Location: Latitude \${latitude}, Longitude \${longitude}, Address: \${data.address || 'Unknown'}\`;
+              document.getElementById('status').textContent = 'Location fetched!';
+            } catch (error) {
+              console.error('Client-side: Error fetching address:', error.message);
+              document.getElementById('status').textContent = 'Error: ' + error.message;
+            }
+          }
+
           if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
               async (position) => {
                 const { latitude, longitude } = position.coords;
                 console.log('Client-side: Location obtained', latitude, longitude);
                 document.getElementById('status').textContent = 'Fetching address...';
-                try {
-                  const response = await fetch('/api/geocode/${uniqueId}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ latitude, longitude })
-                  });
-                  if (!response.ok) {
-                    throw new Error('Failed to fetch address: ' + response.statusText);
-                  }
-                  const data = await response.json();
-                  document.getElementById('location').textContent = 
-                    \`Location: Latitude \${latitude}, Longitude \${longitude}, Address: \${data.address || 'Unknown'}\`;
-                  document.getElementById('status').textContent = 'Location fetched!';
-                } catch (error) {
-                  console.error('Client-side: Error fetching address:', error.message);
-                  document.getElementById('status').textContent = 'Error: ' + error.message;
-                }
+                fetchGeocodeWithDelay(latitude, longitude, '${uniqueId}');
               },
               (error) => {
                 console.error('Client-side: Geolocation error:', error.message);
@@ -105,7 +127,6 @@ app.post('/api/geocode/:id', async (req, res) => {
   try {
     const { latitude, longitude } = req.body;
     
-    // Validate input
     if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
       console.warn(`Invalid coordinates for ID: ${uniqueId}`, req.body);
       return res.status(400).json({ error: 'Invalid or missing coordinates' });
@@ -120,7 +141,7 @@ app.post('/api/geocode/:id', async (req, res) => {
     }
 
     const address = result[0]?.formattedAddress || 'Address not found';
-    console.log(`Geocoded address for ID: ${uniqueId}: ${address}`);
+    console.log(`Geocoded address for ID: ${uniqueId | 'Unknown'}: ${address}`);
     
     res.json({
       latitude,
