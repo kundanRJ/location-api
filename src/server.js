@@ -17,7 +17,7 @@ try {
     formatter: null,
     httpOptions: {
       headers: {
-        'User-Agent': 'LocationAPI/1.0 (your-email@example.com)' // Replace with your email
+        'User-Agent': 'LocationAPI/1.0 (kundanrj.singh@gmail.com)' // Replace with your email
       }
     }
   });
