@@ -6,6 +6,12 @@ const { v4: uuidv4 } = require('uuid');
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Validate Geoapify API key
+if (!process.env.GEOAPIFY_API_KEY) {
+  console.error('GEOAPIFY_API_KEY environment variable is not set');
+  process.exit(1);
+}
+
 // Configure node-geocoder with Geoapify
 let geocoder;
 try {
@@ -13,11 +19,11 @@ try {
   geocoder = NodeGeocoder({
     provider: 'geoapify',
     httpAdapter: 'https',
-    apiKey: process.env.GEOAPIFY_API_KEY, // Set in Vercel environment variables
+    apiKey: process.env.GEOAPIFY_API_KEY,
     formatter: null,
     httpOptions: {
       headers: {
-        'User-Agent': 'LocationAPI/1.0 (kundanrj.singh@gmail.com)' // Replace with your email
+        'User-Agent': 'LocationAPI/1.0 (kundanrj.singh@gmail.com)'
       }
     }
   });
@@ -28,14 +34,6 @@ try {
 
 // Middleware to parse JSON bodies
 app.use(express.json());
-
-// Optional server-side rate limiting for /api/geocode/:id
-// const geocodeLimiter = rateLimit({
-//   windowMs: 1000, // 1 second
-//   max: 1, // 1 request per second
-//   message: 'Too many requests, please try again after 1 second.'
-// });
-// app.use('/api/geocode/:id', geocodeLimiter);
 
 // Serve static HTML page for location requests
 app.get('/location/:id', (req, res) => {
@@ -55,6 +53,7 @@ app.get('/location/:id', (req, res) => {
         <h1>Share Your Location</h1>
         <p id="status">Requesting location...</p>
         <p id="location"></p>
+        <p>Powered by Geoapify. Data © OpenStreetMap contributors, ODbL 1.0. <a href="http://osm.org/copyright">Learn more</a>.</p>
         <script>
           async function fetchGeocodeWithDelay(latitude, longitude, uniqueId) {
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -69,7 +68,7 @@ app.get('/location/:id', (req, res) => {
               }
               const data = await response.json();
               document.getElementById('location').textContent = 
-                \`Location: Latitude \${latitude}, Longitude \${longitude}, Address: \${data.address || 'Unknown'}\`;
+                \`Location: Latitude \${latitude}, Longitude \${longitude}, Address: \${data.formattedAddress}\nDetails: Street: \${data.street}, City: \${data.city}, State: \${data.state}, Postcode: \${data.postcode}, Country: \${data.country}\`;
               document.getElementById('status').textContent = 'Location fetched!';
             } catch (error) {
               console.error('Client-side: Error fetching address:', error.message);
@@ -142,13 +141,20 @@ app.post('/api/geocode/:id', async (req, res) => {
       return res.status(404).json({ error: 'Address not found' });
     }
 
-    const address = result[0]?.formattedAddress || result[0]?.address || 'Address not found';
-    console.log(`Geocoded address for ID: ${uniqueId}: ${address}`);
+    const addressDetails = {
+      formattedAddress: result[0]?.formatted || 'Address not found',
+      street: result[0]?.street || '',
+      city: result[0]?.city || '',
+      state: result[0]?.state || '',
+      postcode: result[0]?.postcode || '',
+      country: result[0]?.country || ''
+    };
+    console.log(`Geocoded address for ID: ${uniqueId}:`, addressDetails);
     
     res.json({
       latitude,
       longitude,
-      address
+      ...addressDetails
     });
   } catch (error) {
     console.error(`Error in geocode endpoint for ID: ${uniqueId}`, error.message, error.stack);
