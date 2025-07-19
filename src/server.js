@@ -4,16 +4,12 @@ const { v4: uuidv4 } = require('uuid');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Debug logging setup
-const debugLog = (message, data = '') => {
-  console.log(`[DEBUG] ${new Date().toISOString()} - ${message}`, data ? JSON.stringify(data, null, 2) : '');
-};
-
 // Serve static HTML page for location requests
 app.get('/location/:id', (req, res) => {
   const uniqueId = req.params.id;
-  debugLog(`Received request for location page`, { uniqueId, headers: req.headers });
-  
+  console.log(`Received request for location page - ID: ${uniqueId}`);
+  console.log('Request headers:', req.headers);
+
   try {
     res.send(`
       <!DOCTYPE html>
@@ -49,7 +45,6 @@ app.get('/location/:id', (req, res) => {
                 throw new Error('Address not found: ' + (data.error_message || 'No results'));
               }
 
-              // Parse Google Maps API response
               const result = data.results[0];
               const addressComponents = result.address_components;
               const addressDetails = {
@@ -61,7 +56,6 @@ app.get('/location/:id', (req, res) => {
                 country: ''
               };
 
-              // Extract address components
               for (const component of addressComponents) {
                 if (component.types.includes('route')) {
                   addressDetails.street = component.long_name;
@@ -110,39 +104,39 @@ app.get('/location/:id', (req, res) => {
       </body>
       </html>
     `);
-    debugLog(`Served location page`, { uniqueId });
+    console.log(`Served location page - ID: ${uniqueId}`);
   } catch (error) {
-    debugLog(`Error serving location page`, { uniqueId, error: error.message, stack: error.stack });
+    console.log(`Error serving location page - ID: ${uniqueId}, Error: ${error.message}`);
     res.status(500).send('Internal Server Error');
   }
 });
 
 // API endpoint to generate a shareable link
 app.get('/api/generate-link', (req, res) => {
-  debugLog('Received request to generate shareable link', { headers: req.headers });
+  console.log('Received request to generate shareable link');
   try {
     const uniqueId = uuidv4();
     const link = `https://${req.get('host')}/location/${uniqueId}`;
-    debugLog(`Generated link`, { link, uniqueId });
+    console.log(`Generated shareable link: ${link}`);
     res.json({ link });
   } catch (error) {
-    debugLog('Error generating link', { error: error.message, stack: error.stack });
+    console.log(`Error generating link: ${error.message}`);
     res.status(500).json({ error: 'Failed to generate link' });
   }
 });
 
 // Global error handler
 app.use((err, req, res, next) => {
-  debugLog('Unhandled error', { error: err.message, stack: err.stack, path: req.path });
+  console.log(`Unhandled error: ${err.message} on path ${req.path}`);
   res.status(500).json({ error: 'Internal Server Error' });
 });
 
 // Start the server
 try {
   app.listen(port, () => {
-    debugLog(`Server running`, { port });
+    console.log(`Server is running on port ${port}`);
   });
 } catch (error) {
-  debugLog('Failed to start server', { error: error.message, stack: error.stack });
+  console.log(`Failed to start server: ${error.message}`);
   process.exit(1);
 }
